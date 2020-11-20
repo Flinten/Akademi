@@ -16,6 +16,10 @@
    [:p.someclass
     "Jeg kan skrive i " [:strong "bold"]
     [:span {:style {:color "red"}} " og rød "] "text."]])
+(def render-fns {:default {:box (fn[{[x y] :pos}] 
+                                [:rect {:x x :y y,  
+                                        :width 50 :height 20 
+                                        :style {:fill :green :stroke :blue}}])}})
 
 ;______________tegneflade_________________
 ;------Objecter-----
@@ -36,9 +40,15 @@
    [:button {:onClick #(swap! debug-mode not)}"debug on/off"]
    ]
   )
+
+(defn render-obj-debug [obj] [:div (pr-str obj)])
+
 (defn draw-area [xs] ;xs er en collection 
   (let [objs (for [x xs]
-               ^{:key (:id x)} [d-obj x])]
+               ^{:key (:id x)} [ (or
+                                  (when @debug-mode render-obj-debug)
+                                  (get-in render-fns [:default (:type x)])
+                                  (fn[_] [:div "Ukendt obj"])) x])]
     (if @debug-mode
      [:div objs]
       [:svg {:width 500, :height 500, :style {:background-color :black}} objs])))
