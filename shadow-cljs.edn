@@ -5,4 +5,5 @@
  :dependencies           [[reagent "1.0.0-alpha2"]]
  :builds {:app {:target     :browser
                 :output-dir "public/scripts/"
-                :modules    {:core {:init-fn akademi.core/run}}}}}
+                :modules    {:core {:init-fn akademi.core/run}}
+                :devtools   {:after-load akademi.core/reload}}}}
