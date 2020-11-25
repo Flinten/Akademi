@@ -4,6 +4,7 @@
 (defonce a (r/atom ["Steen" "Casper"]))
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
+(defonce color-palette (r/atom [:red :green :blue ]))
 (defonce draw-objs ;
   (r/atom [{:id 1 :type :box :pos [100,100], :size [50,50]}]))
 
@@ -11,19 +12,41 @@
                                   [:rect {:x x :y y
                                           :width 50 :height 20
                                           :style {:fill :green :stroke :blue}}])}
-                 :basic {:box (fn [{[x y] :pos [w h] :size :as ob}]
+                 :basic {:box (fn [{[x y] :pos [w h] :size c :color  :as ob}]
                                 [:rect {:x x :y y :on-click #(js/alert (pr-str ob))
                                         :width w :height h
-                                        :style {:fill :khaki :stroke :blue}}])}})
+                                        :style {:fill (get @color-palette c :khaki)  :stroke :blue}}])}})
 
 ;______________tegneflade_________________
  ;Tilføj nyt box objekt der bliver placeret på random pos
 (defn new-box [obj-list]
-  (conj obj-list {:id (inc (apply max (map :id obj-list))) :type :box :pos [(rand-int 500),(rand-int 500)] :size [20 20]}))
+  (conj obj-list 
+        {:id (inc (apply max (map :id obj-list)))
+         :type :box
+         :pos [(rand-int 500),(rand-int 500)]
+         :size (let [w (+ 10 (rand-int 80)) 
+                     h (+ 10 (rand-int 40))]
+                 [w h])
+         }))
+(defn volume-sort [xs]
+  (sort-by (fn [{s :size}] (apply * s)) xs)
+  )
 
 (defn align-left "Flytter objecter til venster" [xs]
-  (map (fn [{[_ y] :pos :as obj}]
-         (assoc obj :pos [0 y])) xs))
+  (let [xs (->> xs 
+                volume-sort 
+                (map #(dissoc % :i ))
+                (map-indexed (fn [i x] (assoc x :color i )) ))]
+    (loop [dy 0
+           resul []
+           [{[_ h] :size :as obj} & rest-xs]
+           xs]
+      (let [obj (assoc obj :pos [0 dy])]
+        (if rest-xs
+          (recur (+ dy h 5)
+                 (conj resul obj)
+                 rest-xs)
+          (conj resul obj))))))
 
 (defn control-area []
   [:div
