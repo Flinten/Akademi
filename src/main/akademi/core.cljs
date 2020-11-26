@@ -5,17 +5,41 @@
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue ]))
+(defonce color (r/atom :blue))
+
 (defonce draw-objs ;
   (r/atom [{:id 1 :type :box :pos [100,100], :size [50,50]}]))
+
+(defn left-pad
+  ([s len]
+   (left-pad s len "0"))
+  ([s len ch]
+   (let [width     (count s)
+         pad-width (- len width)]
+     (cond->> s
+       (pos? pad-width)
+       (str (reduce str "" (repeat pad-width ch)))))))
+
+(defonce palettes {:blue (mapv #(str "#0000" (left-pad (.toString % 16) 2)) (range 256))
+                   :red (mapv #(str "#" (left-pad (.toString % 16) 2) "0000") (range 256))
+                   :green (mapv #(str "#00" (left-pad (.toString % 16) 2) "00") (range 256))})
+
+(defn get-color [idx]
+  (let [dx (/ 256 (count @draw-objs))]
+    (cond
+      (= idx 0) (get (get-in palettes [@color]) idx :red)
+      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red))))
+
+
 
 (def render-fns {:default {:box (fn [{[x y] :pos}]
                                   [:rect {:x x :y y
                                           :width 50 :height 20
                                           :style {:fill :green :stroke :blue}}])}
-                 :basic {:box (fn [{[x y] :pos [w h] :size c :color  :as ob}]
+                 :basic {:box (fn [{[x y] :pos [w h] :size c :color :as ob}]
                                 [:rect {:x x :y y :on-click #(js/alert (pr-str ob))
                                         :width w :height h
-                                        :style {:fill (get @color-palette c :khaki)  :stroke :blue}}])}})
+                                        :style {:fill (get-color c)  :stroke :blue}}])}})
 
 ;______________tegneflade_________________
  ;Tilføj nyt box objekt der bliver placeret på random pos
@@ -57,6 +81,11 @@
     [:select {:selected (str @skin)
               :on-change (fn [event] (reset! skin (keyword (.-value (.-target event)))))}
      (doall (for [x (sort (keys render-fns))]
+              ^{:key (name x)} [:option (name x)]))]]
+   [:label "Color:"
+    [:select {:selected (str @color)
+              :on-change (fn [event] (reset! color (keyword (.-value (.-target event)))))}
+     (doall (for [x (sort (keys palettes))]
               ^{:key (name x)} [:option (name x)]))]]])
 
 (defn render-obj-debug [obj] [:div (pr-str obj)])
