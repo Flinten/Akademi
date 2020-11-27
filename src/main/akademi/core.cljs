@@ -6,16 +6,31 @@
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue ]))
 (defonce draw-objs ;
-  (r/atom [{:id 1 :type :box :pos [100,100], :size [50,50]}]))
-
-(def render-fns {:default {:box (fn [{[x y] :pos}]
+  (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
+           {:id 2 :type :container :pos [25,50], :size [75,75]}
+           {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1}
+           {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
+           {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
+           ]))
+(defn render-container [{[x y] :pos [w h] :size}]
+       [:rect {:x x :y y
+               :width w :height h
+               :style {:fill :red :stroke :blue}}]
+  )
+(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color  :as ob}]
+            [:rect {:x x :y y :on-click #(js/alert (pr-str ob))
+                    :width w :height h
+                    :style {:fill (get @color-palette c :khaki)  :stroke :blue}}])}
+  )
+(def render-fns {:default {:box (fn [{[x y] :pos [w h] :size}]
                                   [:rect {:x x :y y
-                                          :width 50 :height 20
-                                          :style {:fill :green :stroke :blue}}])}
-                 :basic {:box (fn [{[x y] :pos [w h] :size c :color  :as ob}]
-                                [:rect {:x x :y y :on-click #(js/alert (pr-str ob))
-                                        :width w :height h
-                                        :style {:fill (get @color-palette c :khaki)  :stroke :blue}}])}})
+                                          :width w :height h
+                                          :style {:fill :green :stroke :blue}}])
+                           :container render-container
+                           }
+                 :basic basic-skin 
+                 :presentation (merge basic-skin {:container (constantly nil)})
+                 })
 
 ;______________tegneflade_________________
  ;Tilføj nyt box objekt der bliver placeret på random pos
@@ -47,11 +62,24 @@
                  (conj resul obj)
                  rest-xs)
           (conj resul obj))))))
-
+(defn organiser-obj "Organiser box og container" [xs]
+  (let [m (group-by :parent xs)
+        m (into {} 
+                (for [[id children] m :when id] 
+                  [id {:n (count children)
+                       :size [(apply + (map (comp first :size) children))
+                              (apply max (map (comp second :size) children))]
+                       }]
+                  ))] ; m indeholder forhvert contationer id et map med antal children og størrelse
+    (js/console.log (clj->js m ))
+    (tap> m) ; tap> kommado skriver til http://localhost:9631/inspect (tap) evt. kig i cheatsheet
+    xs) 
+  )
 (defn control-area []
   [:div
    [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
    [:button {:on-click #(swap! draw-objs align-left)} "Flyt kasser"]
+   [:button {:on-click #(swap! draw-objs organiser-obj)} "Organiser"]
    [:button {:on-click #(swap! debug-mode not)} "debug on/off"]
    [:label "Skin:"
     [:select {:selected (str @skin)
