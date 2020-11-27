@@ -1,10 +1,12 @@
 (ns akademi.core
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]))
-(defonce a (r/atom ["Steen" "Casper"]))
+(defonce a (r/atom ["Steen" "Casper" "Sofie"]))
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue ]))
+(defonce color (r/atom :blue))
+
 (defonce draw-objs ;
   (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
            {:id 2 :type :container :pos [25,50], :size [75,75]}
@@ -22,6 +24,29 @@
                     :width w :height h
                     :style {:fill (get @color-palette c :khaki)  :stroke :blue}}])}
   )
+
+(defn left-pad
+  ([s len]
+   (left-pad s len "0"))
+  ([s len ch]
+   (let [width     (count s)
+         pad-width (- len width)]
+     (cond->> s
+       (pos? pad-width)
+       (str (reduce str "" (repeat pad-width ch)))))))
+
+(defonce palettes {:blue (mapv #(str "#0000" (left-pad (.toString % 16) 2)) (range 256))
+                   :red (mapv #(str "#" (left-pad (.toString % 16) 2) "0000") (range 256))
+                   :green (mapv #(str "#00" (left-pad (.toString % 16) 2) "00") (range 256))})
+
+(defn get-color [idx]
+  (let [dx (/ 256 (count @draw-objs))]
+    (cond
+      (= idx 0) (get (get-in palettes [@color]) idx :red)
+      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red))))
+
+
+
 (def render-fns {:default {:box (fn [{[x y] :pos [w h] :size}]
                                   [:rect {:x x :y y
                                           :width w :height h
@@ -85,6 +110,11 @@
     [:select {:selected (str @skin)
               :on-change (fn [event] (reset! skin (keyword (.-value (.-target event)))))}
      (doall (for [x (sort (keys render-fns))]
+              ^{:key (name x)} [:option (name x)]))]]
+   [:label "Color:"
+    [:select {:selected (str @color)
+              :on-change (fn [event] (reset! color (keyword (.-value (.-target event)))))}
+     (doall (for [x (sort (keys palettes))]
               ^{:key (name x)} [:option (name x)]))]]])
 
 (defn render-obj-debug [obj] [:div (pr-str obj)])
