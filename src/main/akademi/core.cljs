@@ -1,7 +1,7 @@
 (ns akademi.core
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]))
-(defonce a (r/atom ["Steen" "Casper"]))
+(defonce a (r/atom ["Steen" "Casper" "Sofie"]))
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue ]))
