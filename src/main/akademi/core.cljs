@@ -5,12 +5,12 @@
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue ]))
 (defonce color (r/atom :blue))
-(defonce selected-ids (r/atom #{103}))
+(defonce selected-ids (r/atom #{104}))
 
 (defonce draw-objs ;
   (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
            {:id 2 :type :container :pos [25,50], :size [75,75]}
-           {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1}
+           {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
            {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
            {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
            ]))
@@ -91,6 +91,7 @@
                  (conj resul obj)
                  rest-xs)
           (conj resul obj))))))
+
 (defn organiser-obj "Organiser box og container" [xs]
   (let [m (group-by :parent xs)
         m (into {} 
@@ -138,9 +139,35 @@
       [:div objs]
       [:svg {:width 500, :height 500, :style {:background-color :linen}} objs])))
 
+(defn obj-color [{:keys [color]}]
+  [:div [:label "Color: "
+         [:select {:selected (str color)
+                   #_#_:on-change (fn [event] (reset! color (keyword (.-value (.-target event)))))}
+          (doall (for [x (sort (keys palettes))]
+                   ^{:key (name x)} [:option (name x)]))]]])
+
+(defn obj-text [{:keys [text]}]
+  [:div [:label "Text: "
+         [:input {:type :text 
+                  :value (str text)
+                  :placeholder "Her kan der står en tekst."}]
+         ]])
+
+(defn obj-properties [obj]
+  [:div "ID: " (:id obj) [:br] 
+   [obj-text obj]
+   [obj-color obj] [:hr]
+   "mere her"]
+  )
+
+
 (defn mini-app []
   [:div [control-area]
-   [draw-area @draw-objs]])
+   [:table [:tr 
+            [:td [draw-area @draw-objs]] 
+            [:td {:valign :top}
+             (let [[x] (filter (comp @selected-ids :id) @draw-objs)]
+               (when x [obj-properties x]))]]]])
 
 (defn ^:export run []
   (rdom/render [mini-app] (js/document.getElementById "app")))
