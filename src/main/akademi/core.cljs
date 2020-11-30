@@ -3,7 +3,7 @@
             [reagent.dom :as rdom]))
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
-(defonce color-palette (r/atom [:red :green :blue ]))
+(defonce color-palette (r/atom [:red :green :blue]))
 (defonce color (r/atom :blue))
 (defonce selected-ids (r/atom #{104}))
 
@@ -12,33 +12,30 @@
            {:id 2 :type :container :pos [25,50], :size [75,75]}
            {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
            {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
-           {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
-           ]))
+           {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}]))
 (defn swap-obj! [id f & args]
-  (swap! draw-objs
-         (fn [xs]
-           (map #_(fn [{i :id :as ob}]
-                    (if (= id i) (apply f ob args) ob))
-                #(if (= id (:id %)) (apply f % args) %)
-                xs))))
+  ; NB! - udnytter at clojurescript er single threaded
+  (let [xs @draw-objs
+        xs' (map #_(fn [{i :id :as ob}]
+                     (if (= id i) (apply f ob args) ob))
+                 #(if (= id (:id %)) (apply f % args) %)
+                 xs)]
+    (when-not (= xs xs')
+      (reset! draw-objs xs')))
+  nil)
 
 (defn render-container [{[x y] :pos [w h] :size}]
-       [:rect {:x x :y y
-               :width w :height h
-               :style {:fill :red :stroke :blue}}]
-  )
+  [:rect {:x x :y y
+          :width w :height h
+          :style {:fill :red :stroke :blue}}])
 (def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as ob}]
-            [:rect {:x x :y y 
-                    :on-click (fn[_] (swap! selected-ids #(if (% id) #{}  #{id} )))
+                        [:rect {:x x :y y
+                                :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
                     ;(js/alert (pr-str ob))
-                    :width w :height h
-                    :style {:fill (get @color-palette c :khaki)
-                            :stroke (if selected :black :blue)
-                            :stroke-width (if selected 4 2)
-                            }}])
-                 }
-  
-  )
+                                :width w :height h
+                                :style {:fill (get @color-palette c :khaki)
+                                        :stroke (if selected :black :blue)
+                                        :stroke-width (if selected 4 2)}}])})
 
 (defn left-pad
   ([s len]
@@ -58,23 +55,20 @@
   (let [dx (/ 256 (count @draw-objs))]
     (cond
       (= idx 0) (get (get-in palettes [@color]) idx :red)
-      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red)))
-  )
+      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red))))
 
 (def render-fns {:default {:box (fn [{[x y] :pos [w h] :size}]
                                   [:rect {:x x :y y
                                           :width w :height h
                                           :style {:fill :green :stroke :blue}}])
-                           :container render-container
-                           }
-                 :basic basic-skin 
-                 :presentation (merge basic-skin {:container (constantly nil)})
-                 })
+                           :container render-container}
+                 :basic basic-skin
+                 :presentation (merge basic-skin {:container (constantly nil)})})
 
 ;______________tegneflade_________________
  ;Tilføj nyt box objekt der bliver placeret på random pos
 (defn new-box [obj-list]
-  (conj obj-list 
+  (conj obj-list
         {:id (inc (apply max (map :id obj-list)))
          :type :box
          :pos [(rand-int 500),(rand-int 500)]
@@ -86,10 +80,10 @@
   (sort-by (fn [{s :size}] (apply * s)) xs))
 
 (defn align-left "Flytter objecter til venster" [xs]
-  (let [xs (->> xs 
-                volume-sort 
-                (map #(dissoc % :i ))
-                (map-indexed (fn [i x] (assoc x :color i )) ))]
+  (let [xs (->> xs
+                volume-sort
+                (map #(dissoc % :i))
+                (map-indexed (fn [i x] (assoc x :color i))))]
     (loop [dy 0
            resul []
            [{[_ h] :size :as obj} & rest-xs]
@@ -138,9 +132,8 @@
                                   (when @debug-mode render-obj-debug)
                                   (get-in render-fns [@skin (:type x)])
                                   (get-in render-fns [:default (:type x)])
-                                  (fn [_] [:div "Ukendt obj"])) 
-                                 (assoc x :selected (@selected-ids (:id x)))]
-                ))]
+                                  (fn [_] [:div "Ukendt obj"]))
+                                 (assoc x :selected (@selected-ids (:id x)))]))]
     (if @debug-mode
       [:div objs]
       [:svg {:width 500, :height 500, :style {:background-color :linen}} objs])))
@@ -153,24 +146,23 @@
                    ^{:key (name x)} [:option (name x)]))]]])
 
 (defn obj-text [{:keys [text id]}]
-  [:div [:label "Text: "
-         [:input {:type :text
-                  :value (str text)
-                  :placeholder "Her kan der står en tekst."
-                  :on-change (fn [ev] (swap-obj! id #(assoc % :a ev)))}]]])
+  [:div
+   [:label "Text: "
+    ^{:key id} [:input {:type :text
+                        :default-value (str text)
+                        :placeholder "Her kan der stå en tekst"
+                        :on-change #(swap-obj! id assoc :text (.-value (.-target %)))}]]])
 
 (defn obj-properties [obj]
-  [:div "ID: " (:id obj) [:br] 
+  [:div "ID: " (:id obj) [:br]
    [obj-text obj]
    [obj-color obj] [:hr]
-   "mere her"]
-  )
-
+   "mere her"])
 
 (defn mini-app []
   [:div [control-area]
-   [:table [:tr 
-            [:td [draw-area @draw-objs]] 
+   [:table [:tr
+            [:td [draw-area @draw-objs]]
             [:td {:valign :top}
              (let [[x] (filter (comp @selected-ids :id) @draw-objs)]
                (when x [obj-properties x]))]]]])
