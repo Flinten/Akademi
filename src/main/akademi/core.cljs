@@ -14,6 +14,14 @@
            {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
            {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
            ]))
+(defn swap-obj! [id f & args]
+  (swap! draw-objs
+         (fn [xs]
+           (map #_(fn [{i :id :as ob}]
+                    (if (= id i) (apply f ob args) ob))
+                #(if (= id (:id %)) (apply f % args) %)
+                xs))))
+
 (defn render-container [{[x y] :pos [w h] :size}]
        [:rect {:x x :y y
                :width w :height h
@@ -68,13 +76,12 @@
         {:id (inc (apply max (map :id obj-list)))
          :type :box
          :pos [(rand-int 500),(rand-int 500)]
-         :size (let [w (+ 10 (rand-int 80)) 
+         :size (let [w (+ 10 (rand-int 80))
                      h (+ 10 (rand-int 40))]
-                 [w h])
-         }))
+                 [w h])}))
+
 (defn volume-sort [xs]
-  (sort-by (fn [{s :size}] (apply * s)) xs)
-  )
+  (sort-by (fn [{s :size}] (apply * s)) xs))
 
 (defn align-left "Flytter objecter til venster" [xs]
   (let [xs (->> xs 
@@ -94,17 +101,14 @@
 
 (defn organiser-obj "Organiser box og container" [xs]
   (let [m (group-by :parent xs)
-        m (into {} 
-                (for [[id children] m :when id] 
+        m (into {}
+                (for [[id children] m :when id]
                   [id {:n (count children)
                        :size [(apply + (map (comp first :size) children))
-                              (apply max (map (comp second :size) children))]
-                       }]
-                  ))] ; m indeholder forhvert contationer id et map med antal children og størrelse
-    (js/console.log (clj->js m ))
+                              (apply max (map (comp second :size) children))]}]))] ; m indeholder forhvert contationer id et map med antal children og størrelse
+    (js/console.log (clj->js m))
     (tap> m) ; tap> kommado skriver til http://localhost:9631/inspect (tap) evt. kig i cheatsheet
-    xs) 
-  )
+    xs))
 
 (defn control-area []
   [:div
@@ -146,12 +150,12 @@
           (doall (for [x (sort (keys palettes))]
                    ^{:key (name x)} [:option (name x)]))]]])
 
-(defn obj-text [{:keys [text]}]
+(defn obj-text [{:keys [text id]}]
   [:div [:label "Text: "
-         [:input {:type :text 
+         [:input {:type :text
                   :value (str text)
-                  :placeholder "Her kan der står en tekst."}]
-         ]])
+                  :placeholder "Her kan der står en tekst."
+                  :on-change (fn [ev] (swap-obj! id #(assoc % :a ev)))}]]])
 
 (defn obj-properties [obj]
   [:div "ID: " (:id obj) [:br] 
