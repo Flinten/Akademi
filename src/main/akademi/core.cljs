@@ -1,11 +1,11 @@
 (ns akademi.core
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]))
-(defonce a (r/atom ["Steen" "Casper" "Sofie"]))
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue ]))
 (defonce color (r/atom :blue))
+(defonce selected-ids (r/atom #{103}))
 
 (defonce draw-objs ;
   (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
@@ -19,10 +19,15 @@
                :width w :height h
                :style {:fill :red :stroke :blue}}]
   )
-(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color  :as ob}]
-            [:rect {:x x :y y :on-click #(js/alert (pr-str ob))
+(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as ob}]
+            [:rect {:x x :y y 
+                    :on-click (fn[_] (swap! selected-ids #(if (% id) #{}  #{id} )))
+                    ;(js/alert (pr-str ob))
                     :width w :height h
-                    :style {:fill (get @color-palette c :khaki)  :stroke :blue}}])}
+                    :style {:fill (get @color-palette c :khaki)
+                            :stroke (if selected :black :blue)
+                            :stroke-width (if selected 4 2)
+                            }}])}
   )
 
 (defn left-pad
@@ -43,9 +48,8 @@
   (let [dx (/ 256 (count @draw-objs))]
     (cond
       (= idx 0) (get (get-in palettes [@color]) idx :red)
-      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red))))
-
-
+      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red)))
+  )
 
 (def render-fns {:default {:box (fn [{[x y] :pos [w h] :size}]
                                   [:rect {:x x :y y
@@ -100,6 +104,7 @@
     (tap> m) ; tap> kommado skriver til http://localhost:9631/inspect (tap) evt. kig i cheatsheet
     xs) 
   )
+
 (defn control-area []
   [:div
    [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
@@ -126,10 +131,13 @@
                                   (when @debug-mode render-obj-debug)
                                   (get-in render-fns [@skin (:type x)])
                                   (get-in render-fns [:default (:type x)])
-                                  (fn [_] [:div "Ukendt obj"])) x]))]
+                                  (fn [_] [:div "Ukendt obj"])) 
+                                 (assoc x :selected (@selected-ids (:id x)))]
+                ))]
     (if @debug-mode
       [:div objs]
       [:svg {:width 500, :height 500, :style {:background-color :linen}} objs])))
+
 (defn mini-app []
   [:div [control-area]
    [draw-area @draw-objs]])
