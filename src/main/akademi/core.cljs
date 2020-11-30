@@ -35,7 +35,9 @@
                     :style {:fill (get @color-palette c :khaki)
                             :stroke (if selected :black :blue)
                             :stroke-width (if selected 4 2)
-                            }}])}
+                            }}])
+                 }
+  
   )
 
 (defn left-pad
