@@ -42,14 +42,13 @@
                                         :stroke (if selected :black :blue)
                                         :stroke-width (if selected 4 2)}}])
                  :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as ob}]
-                        [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
-                                :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
+                            [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
+                                       :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
                     ;(js/alert (pr-str ob))
-                                :rx (/ w 2) :ry (/ h 2)
-                                :style {:fill (get @color-palette c :green)
-                                        :stroke (if selected :black :blue)
-                                        :stroke-width (if selected 4 2)}}])
-                 })
+                                       :rx (/ w 2) :ry (/ h 2)
+                                       :style {:fill (get @color-palette c :green)
+                                               :stroke (if selected :black :blue)
+                                               :stroke-width (if selected 4 2)}}])})
 (defn left-pad
   ([s len]
    (left-pad s len "0"))
@@ -178,15 +177,13 @@
                    ^{:key (name k)} [:option {:value k} v]))]]])
 (defn drawing-history []
   [:div (count @history) " ændring(er)"
-   (doall (for  [x @history :let [ts (:ts (meta x))]] 
-               ^{:key ts}[:div {:style {:cursor :pointer :text-decoration :underline}
-                                :on-click #(->> @history 
-                                                (filter (comp #{ts} :ts meta))
-                                                first
-                                                (reset! draw-objs))}
-                          (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))
-   ]
-  )
+   (doall (for  [x @history :let [ts (:ts (meta x))]]
+            ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline}
+                              :on-click #(->> @history
+                                              (filter (comp #{ts} :ts meta))
+                                              first
+                                              (reset! draw-objs))}
+                        (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))])
 
 (defn obj-properties [obj]
   [:div "ID: " (:id obj) [:br]
