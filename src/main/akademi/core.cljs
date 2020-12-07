@@ -1,25 +1,31 @@
 (ns akademi.core
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]))
+(def initial-objs [{:id 1 :type :container :pos [100,50], :size [40,40]}
+                   {:id 2 :type :container :pos [25,50], :size [75,75]}
+                   {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
+                   {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
+                   {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
+                   {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}])
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue]))
 (defonce color (r/atom :blue))
 (defonce selected-ids (r/atom #{104}))
-(defonce history (r/atom '()))
+(defonce history (r/atom {0 initial-objs})) ; map til vores historik
+(defonce current-ts (r/atom 0))
+(defonce preview-ts (r/atom nil))
 
 (defonce draw-objs ;
-  (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
-           {:id 2 :type :container :pos [25,50], :size [75,75]}
-           {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
-           {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
-           {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
-           {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}]))
+  (r/atom initial-objs))
 (add-watch draw-objs :history (fn [_ _ old new]
                                 (when-not
                                  (= old new)
-                                  (swap! history conj (with-meta new {:ts (.now js/Date)})))))
-(defonce preview-objs (r/atom nil))
+                                  (let [ts (.now js/Date)]
+                                    (when @current-ts 
+                                      (swap! history conj {ts new})
+                                      (reset! current-ts ts))))))
+
 (defn swap-obj! [id f & args]
   ; NB! - udnytter at clojurescript er single threaded
   (let [xs @draw-objs
@@ -176,20 +182,22 @@
                              :on-change #(swap-obj! id assoc :type (keyword (target-value %)))}
           (doall (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
                    ^{:key (name k)} [:option {:value k} v]))]]])
-;(defn )
+(defn goto-history "Går til det angivne tidspunkt i historikken. TIMETRAVEL!!!!"[ts]
+  (reset! current-ts nil)
+  (reset! draw-objs (get @history ts))
+  (reset! current-ts ts))
+
 (defn drawing-history []
-  [:div (count @history) " ændring(er)"
-   (doall (for  [x @history :let [ts (:ts (meta x))]]
-            ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline}
-                              :on-click #(->> @history
-                                              (filter (comp #{ts} :ts meta))
-                                              first
-                                              (reset! draw-objs))
-                              :on-mouse-over #(->> @history
-                                                   (filter (comp #{ts} :ts meta))
-                                                   first
-                                                   (reset! preview-objs))
-                              :on-mouse-out #(reset! preview-objs nil)}
+  [:div (count @history) " ændring(er)" 
+   [:button {:disabled (when (= @current-ts (apply min (keys @history))) :disabled)} "Undo"]
+   [:button {:disabled (when (= @current-ts (apply max (keys @history))) :disabled)} "Redo"]
+   (doall (for  [[ts x] (reverse (sort @history))] ; sorter history efter tid (reverse = sidtse ændring øverst)
+            ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline 
+                                      :color (cond (= ts @current-ts) :green 
+                                                   (= ts @preview-ts) :purple )}
+                              :on-click #(goto-history ts)
+                              :on-mouse-over #(reset! preview-ts ts)
+                              :on-mouse-out #(reset! preview-ts)}
                         (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))])
 
 (defn obj-properties [obj]
@@ -197,15 +205,19 @@
    [obj-type obj]
    [obj-text obj]
    [obj-color obj] [:hr]
-   [drawing-history]])
+   ])
 
 (defn mini-app []
-  (let [xs (or @preview-objs @draw-objs)] [:div [control-area]
-   [:table [:tr
-            [:td [draw-area xs]]
-            [:td {:valign :top}
-             (let [[x] (filter (comp @selected-ids :id) xs)]
-               (when x [obj-properties x]))]]]]))
+  (let [xs (or (get @history @preview-ts) @draw-objs)] [:div [control-area]
+   [:table
+    [:tr
+     [:td [draw-area xs] (when @debug-mode
+                           [:div [:hr] [:pre (with-out-str (cljs.pprint/pprint @history))]])]
+        ;consol output fanges og "formateres" råt
+     [:td {:valign :top} [drawing-history]]
+     [:td {:valign :top}
+      (let [[x] (filter (comp @selected-ids :id) xs)]
+        (when x [obj-properties x]))]]]]))
 
 (defn ^:export run []
   (rdom/render [mini-app] (js/document.getElementById "app")))
