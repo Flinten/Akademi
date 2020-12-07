@@ -1,59 +1,55 @@
-(ns akademi.core ; Namespace
+(ns akademi.core
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]))
-; defonce bliver instaniceret når porgrammet starter
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue]))
 (defonce color (r/atom :blue))
 (defonce selected-ids (r/atom #{104}))
 (defonce history (r/atom '()))
-(defonce draw-objs "Hard code vector"
+
+(defonce draw-objs ;
   (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
            {:id 2 :type :container :pos [25,50], :size [75,75]}
            {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
            {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
            {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
            {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}]))
-;Add-watch er en slags eventlistner på draw-objs vector
-;:history er nøglen(key) 
-;With-meta er det samme som ^{:ts (.now js/Date)}
-(add-watch draw-objs :history (fn [_ _ old new] 
+(add-watch draw-objs :history (fn [_ _ old new]
                                 (when-not
                                  (= old new)
                                   (swap! history conj (with-meta new {:ts (.now js/Date)})))))
-(defn swap-obj!  "NB! - udnytter at clojurescript er single threaded, iterere igennem draw-objs,
-                  Koden bliver kun skudt af hvis id er det samme"
-  [id f & args]
+(defonce preview-objs (r/atom nil))
+(defn swap-obj! [id f & args]
+  ; NB! - udnytter at clojurescript er single threaded
   (let [xs @draw-objs
-        xs' (map
-             #(if (= id (:id %)) (apply f % args) %)
-             xs)]
+        xs' (map #_(fn [{i :id :as ob}]
+                     (if (= id i) (apply f ob args) ob))
+                 #(if (= id (:id %)) (apply f % args) %)
+                 xs)]
     (when-not (= xs xs')
       (reset! draw-objs xs')))
   nil)
-(defn render-container "Laver en rød kasse som ikke bliver brugt"
-  [{[x y] :pos [w h] :size}]
+(defn render-container [{[x y] :pos [w h] :size}]
   [:rect {:x x :y y
           :width w :height h
           :style {:fill :red :stroke :blue}}])
-(def basic-skin 
-  "Basic skin er tegner objektet i en box eller ellipse
-   :as ob refererer til hele objektet som er parameter overført"
-  {:box (fn [{[x y] :pos, [w h] :size, c :color, :keys [selected id], :as ob}]
-          [:rect {:x x :y y
-                  :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
-                  :width w :height h
-                  :style {:fill (get @color-palette c :khaki)
-                          :stroke (if selected :black :blue)
-                          :stroke-width (if selected 4 2)}}])
-   :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as ob}]
-              [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
-                         :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
-                         :rx (/ w 2) :ry (/ h 2)
-                         :style {:fill (get @color-palette c :green)
-                                 :stroke (if selected :black :blue)
-                                 :stroke-width (if selected 4 2)}}])})
+(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id]}]
+                        [:rect {:x x :y y
+                                :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
+                    ;(js/alert (pr-str ob))
+                                :width w :height h
+                                :style {:fill (get @color-palette c :khaki)
+                                        :stroke (if selected :black :blue)
+                                        :stroke-width (if selected 4 2)}}])
+                 :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id]}]
+                            [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
+                                       :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
+                    ;(js/alert (pr-str ob))
+                                       :rx (/ w 2) :ry (/ h 2)
+                                       :style {:fill (get @color-palette c :green)
+                                               :stroke (if selected :black :blue)
+                                               :stroke-width (if selected 4 2)}}])})
 (defn left-pad
   ([s len]
    (left-pad s len "0"))
@@ -180,17 +176,21 @@
                              :on-change #(swap-obj! id assoc :type (keyword (target-value %)))}
           (doall (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
                    ^{:key (name k)} [:option {:value k} v]))]]])
+;(defn )
 (defn drawing-history []
   [:div (count @history) " ændring(er)"
-   (doall (for  [x @history :let [ts (:ts (meta x))]] 
-               ^{:key ts}[:div {:style {:cursor :pointer :text-decoration :underline}
-                                :on-click #(->> @history 
-                                                (filter (comp #{ts} :ts meta))
-                                                first
-                                                (reset! draw-objs))}
-                          (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))
-   ]
-  )
+   (doall (for  [x @history :let [ts (:ts (meta x))]]
+            ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline}
+                              :on-click #(->> @history
+                                              (filter (comp #{ts} :ts meta))
+                                              first
+                                              (reset! draw-objs))
+                              :on-mouse-over #(->> @history
+                                                   (filter (comp #{ts} :ts meta))
+                                                   first
+                                                   (reset! preview-objs))
+                              :on-mouse-out #(reset! preview-objs nil)}
+                        (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))])
 
 (defn obj-properties [obj]
   [:div "ID: " (:id obj) [:br]
@@ -200,12 +200,12 @@
    [drawing-history]])
 
 (defn mini-app []
-  [:div [control-area]
+  (let [xs (or @preview-objs @draw-objs)] [:div [control-area]
    [:table [:tr
-            [:td [draw-area @draw-objs]]
+            [:td [draw-area xs]]
             [:td {:valign :top}
-             (let [[x] (filter (comp @selected-ids :id) @draw-objs)]
-               (when x [obj-properties x]))]]]])
+             (let [[x] (filter (comp @selected-ids :id) xs)]
+               (when x [obj-properties x]))]]]]))
 
 (defn ^:export run []
   (rdom/render [mini-app] (js/document.getElementById "app")))
