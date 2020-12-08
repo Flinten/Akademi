@@ -36,22 +36,25 @@
     (when-not (= xs xs')
       (reset! draw-objs xs')))
   nil)
+(defn obj-click-handler
+  [id]
+  (fn [event] (swap! selected-ids #(-> (if (.-shiftKey event) % #{})
+                                       (conj id)
+                                       (disj (% id))))))
 (defn render-container [{[x y] :pos [w h] :size}]
   [:rect {:x x :y y
           :width w :height h
           :style {:fill :red :stroke :blue}}])
 (def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id]}]
                         [:rect {:x x :y y
-                                :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
-                    ;(js/alert (pr-str ob))
+                                :on-click (obj-click-handler id)
                                 :width w :height h
                                 :style {:fill (get @color-palette c :khaki)
                                         :stroke (if selected :black :blue)
                                         :stroke-width (if selected 4 2)}}])
                  :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id]}]
                             [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
-                                       :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
-                    ;(js/alert (pr-str ob))
+                                       :on-click (obj-click-handler id)
                                        :rx (/ w 2) :ry (/ h 2)
                                        :style {:fill (get @color-palette c :green)
                                                :stroke (if selected :black :blue)
@@ -176,39 +179,66 @@
                         :placeholder "Her kan der stå en tekst"
                         :on-change #(swap-obj! id assoc :text (target-value %))}]]])
 
-(defn obj-type [{:keys [type id]}]
-  [:div [:label "Type: "
-        ^{:key id} [:select {:value type
+(defn obj-types [[{:keys [type id]} :as xs]]
+  (let [multi (next (distinct (map :type xs)))] 
+    [:div [:label "Type: "
+        ^{:key id} [:select {:value (if multi "" type)
                              :on-change #(swap-obj! id assoc :type (keyword (target-value %)))}
-          (doall (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
-                   ^{:key (name k)} [:option {:value k} v]))]]])
+          (doall (concat (when multi (list [:option {:value ""} "Flere typer"])) 
+                         (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
+                            ^{:key (name k)} [:option {:value k} v])))]]]))
 (defn goto-history "Går til det angivne tidspunkt i historikken. TIMETRAVEL!!!!"[ts]
   (reset! current-ts nil)
   (reset! draw-objs (get @history ts))
   (reset! current-ts ts))
-
+#_(let [get-prev-next-ts (fn [order min-max]
+                         (when-let [xs (->> @history
+                                            keys
+                                            (filter #(order % @current-ts))
+                                            seq)]
+                           (apply min-max xs)))]
+  (def get-next-ts (partial get-prev-next-ts > min))
+  (def get-previous-ts (partial get-prev-next-ts < max)))
+(defn prev-next-fn
+  "Returnerer en funktion som kan rejse frem eller tilbage i historiken"
+  [direction]
+  (fn []
+    (when-let [xs (->> @history
+                       keys
+                       (filter #(direction % @current-ts))
+                       seq)]
+      (apply ({< max, > min} direction) xs))))
+(def get-next-ts (prev-next-fn >))
+(def get-previous-ts (prev-next-fn <))
 (defn drawing-history []
   [:div (count @history) " ændring(er)" 
-   [:button {:disabled (when (= @current-ts (apply min (keys @history))) :disabled)} "Undo"]
-   [:button {:disabled (when (= @current-ts (apply max (keys @history))) :disabled)} "Redo"]
+   [:button {:disabled (when-not (get-previous-ts) :disabled)
+             :on-click #(goto-history (get-previous-ts))}
+     "Undo"]
+   [:button {:disabled (when-not (get-next-ts) :disabled)
+             :on-click #(goto-history (get-next-ts))} "Redo"]
    (doall (for  [[ts x] (reverse (sort @history))] ; sorter history efter tid (reverse = sidtse ændring øverst)
             ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline 
                                       :color (cond (= ts @current-ts) :green 
                                                    (= ts @preview-ts) :purple )}
                               :on-click #(goto-history ts)
                               :on-mouse-over #(reset! preview-ts ts)
-                              :on-mouse-out #(reset! preview-ts)}
+                              :on-mouse-out #(reset! preview-ts nil)}
                         (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))])
 
-(defn obj-properties [obj]
-  [:div "ID: " (:id obj) [:br]
-   [obj-type obj]
+(defn obj-properties [[obj :as xs]]
+  [:div "ID: " (:id obj) (when (next xs) " med flere") [:br]
+   [obj-types xs]
    [obj-text obj]
    [obj-color obj] [:hr]
    ])
-
+(defn values-by
+  [f xs]
+  (into {} (for [x xs] [(f x) x])))
 (defn mini-app []
-  (let [xs (or (get @history @preview-ts) @draw-objs)] [:div [control-area]
+  (let [xs (or (get @history @preview-ts) @draw-objs)
+        by-id (values-by :id xs)] 
+    [:div [control-area]
    [:table
     [:tr
      [:td [draw-area xs] (when @debug-mode
@@ -216,8 +246,7 @@
         ;consol output fanges og "formateres" råt
      [:td {:valign :top} [drawing-history]]
      [:td {:valign :top}
-      (let [[x] (filter (comp @selected-ids :id) xs)]
-        (when x [obj-properties x]))]]]]))
+        (when (seq @selected-ids) [obj-properties (map by-id @selected-ids)])]]]]))
 
 (defn ^:export run []
   (rdom/render [mini-app] (js/document.getElementById "app")))
