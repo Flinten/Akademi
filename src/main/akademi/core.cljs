@@ -1,6 +1,8 @@
 (ns akademi.core
-  (:require [reagent.core :as r]
-            [reagent.dom :as rdom]))
+  (:require
+   [akademi.util :as util]
+   [reagent.core :as r]
+   [reagent.dom :as rdom]))
 (def initial-objs [{:id 1 :type :container :pos [100,50], :size [40,40]}
                    {:id 2 :type :container :pos [25,50], :size [75,75]}
                    {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
@@ -45,20 +47,31 @@
   [:rect {:x x :y y
           :width w :height h
           :style {:fill :red :stroke :blue}}])
-(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id]}]
-                        [:rect {:x x :y y
-                                :on-click (obj-click-handler id)
-                                :width w :height h
-                                :style {:fill (get @color-palette c :khaki)
-                                        :stroke (if selected :black :blue)
-                                        :stroke-width (if selected 4 2)}}])
-                 :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id]}]
-                            [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
+(defn change-text [])
+(defn add-svg-text [svg-obj {[x y] :pos [w h] :size c :color :keys [selected id text] :as obj}]
+  [:svg {:x x :y y } 
+   svg-obj
+
+       [:text {:x 0  :y (+ 10 (/ h 2)) :font-size 20} text]])
+(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
+                     (add-svg-text 
+                      [:rect {:x 0 :y 0
+                              :on-click (obj-click-handler id)
+                              :width w :height h
+                              :style {:fill (get @color-palette c :khaki)
+                                      :stroke (if selected :black :blue)
+                                      :stroke-width (if selected 4 2)}}]
+                      obj )  )
+                 :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
+                            
+                            (add-svg-text
+                             [:ellipse {:cx (/ w 2) :cy (/ h 2) 
                                        :on-click (obj-click-handler id)
                                        :rx (/ w 2) :ry (/ h 2)
                                        :style {:fill (get @color-palette c :green)
                                                :stroke (if selected :black :blue)
-                                               :stroke-width (if selected 4 2)}}])})
+                                               :stroke-width (if selected 4 2)}}]
+                             obj))})
 (defn left-pad
   ([s len]
    (left-pad s len "0"))
@@ -170,20 +183,30 @@
                    #_#_:on-change (fn [event] (reset! color (keyword (.-value (.-target event)))))}
           (doall (for [x (sort (keys palettes))]
                    ^{:key (name x)} [:option (name x)]))]]])
-
-(defn obj-text [{:keys [text id]}]
-  [:div
-   [:label "Text: "
+(defn change-text-of-multiple [ids text]
+  (doseq [id ids] (swap-obj! id assoc :text text)))
+(defn obj-texts [[{:keys [text id]} :as xs]]
+  (let [multi (->> 
+               xs 
+               (map :text)
+               distinct 
+               next)]
+    [:div
+   [:label "Text: " 
     ^{:key id} [:input {:type :text
-                        :default-value (str text)
-                        :placeholder "Her kan der stå en tekst"
-                        :on-change #(swap-obj! id assoc :text (target-value %))}]]])
+                        :default-value (str (when-not multi text))
+                        :placeholder (if multi "multi text" "Text")
+                        :on-change #(change-text-of-multiple @selected-ids (target-value %))}]]]))
+
+
+(defn change-type-of-multiple [ids type]
+  (doseq [id ids](swap-obj! id assoc :type type)))
 
 (defn obj-types [[{:keys [type id]} :as xs]]
   (let [multi (next (distinct (map :type xs)))] 
     [:div [:label "Type: "
         ^{:key id} [:select {:value (if multi "" type)
-                             :on-change #(swap-obj! id assoc :type (keyword (target-value %)))}
+                             :on-change #(change-type-of-multiple @selected-ids (keyword (target-value %)))}
           (doall (concat (when multi (list [:option {:value ""} "Flere typer"])) 
                          (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
                             ^{:key (name k)} [:option {:value k} v])))]]]))
@@ -229,22 +252,21 @@
 (defn obj-properties [[obj :as xs]]
   [:div "ID: " (:id obj) (when (next xs) " med flere") [:br]
    [obj-types xs]
-   [obj-text obj]
+   
+   [obj-texts xs]
    [obj-color obj] [:hr]
    ])
-(defn values-by
-  [f xs]
-  (into {} (for [x xs] [(f x) x])))
+
 (defn mini-app []
   (let [xs (or (get @history @preview-ts) @draw-objs)
-        by-id (values-by :id xs)] 
+        by-id (util/index-by :id xs)] 
     [:div [control-area]
    [:table
     [:tr
-     [:td [draw-area xs] (when @debug-mode
+     [:td {:valign :top} [draw-area xs] (when @debug-mode
                            [:div [:hr] [:pre (with-out-str (cljs.pprint/pprint @history))]])]
-        ;consol output fanges og "formateres" råt
-     [:td {:valign :top} [drawing-history]]
+        ;consol output fanges og "formateres" råt 
+     [:td {:valign :top} [:div {:style {:max-height 500 :overflow :auto}}[drawing-history]]]
      [:td {:valign :top}
         (when (seq @selected-ids) [obj-properties (map by-id @selected-ids)])]]]]))
 
