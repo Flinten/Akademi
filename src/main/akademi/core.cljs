@@ -71,7 +71,7 @@
                                                 :stroke (if selected :black :blue)
                                                 :stroke-width (if selected 4 2)}}]
                              obj))})
-(defn left-pad "Left padder sting med nuller, "
+(defn left-pad "Left padder string med nuller, "
   ([s len]
    (left-pad s len "0"))
   ([s len ch]
