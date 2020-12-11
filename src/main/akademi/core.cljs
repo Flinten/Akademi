@@ -1,60 +1,73 @@
-(ns akademi.core ; Namespace
-  (:require [reagent.core :as r]
-            [reagent.dom :as rdom]))
-; defonce bliver instaniceret når porgrammet starter
+(ns akademi.core
+  (:require
+   [akademi.util :as util]
+   [reagent.core :as r]
+   [reagent.dom :as rdom]))
+(def initial-objs [{:id 1 :type :container :pos [100,50], :size [40,40]}
+                   {:id 2 :type :container :pos [25,50], :size [75,75]}
+                   {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
+                   {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
+                   {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
+                   {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}])
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue]))
 (defonce color (r/atom :blue))
 (defonce selected-ids (r/atom #{104}))
-(defonce history (r/atom '()))
-(defonce draw-objs "Hard code vector"
-  (r/atom [{:id 1 :type :container :pos [100,50], :size [40,40]}
-           {:id 2 :type :container :pos [25,50], :size [75,75]}
-           {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
-           {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
-           {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
-           {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}]))
-;Add-watch er en slags eventlistner på draw-objs vector
-;:history er nøglen(key) 
-;With-meta er det samme som ^{:ts (.now js/Date)}
-(add-watch draw-objs :history (fn [_ _ old new] 
+(defonce history (r/atom {0 initial-objs})) ; map til vores historik 0 er timestamp
+(defonce current-ts (r/atom 0))
+(defonce preview-ts (r/atom nil))
+
+(defonce draw-objs (r/atom initial-objs))
+(add-watch draw-objs :history (fn [_ _ old new]
                                 (when-not
                                  (= old new)
-                                  (swap! history conj (with-meta new {:ts (.now js/Date)})))))
-(defn swap-obj!  "NB! - udnytter at clojurescript er single threaded, iterere igennem draw-objs,
-                  Koden bliver kun skudt af hvis id er det samme"
-  [id f & args]
+                                  (let [ts (.now js/Date)]
+                                    (when @current-ts
+                                      (swap! history conj {ts new})
+                                      (reset! current-ts ts))))))
+
+(defn swap-obj! [id f & args]
+  ; NB! - udnytter at clojurescript er single threaded
   (let [xs @draw-objs
         xs' (map
              #(if (= id (:id %)) (apply f % args) %)
              xs)]
     (when-not (= xs xs')
-      (reset! draw-objs xs')))
-  nil)
-(defn render-container "Laver en rød kasse som ikke bliver brugt"
-  [{[x y] :pos [w h] :size}]
+      (reset! draw-objs xs'))))
+(defn obj-click-handler
+  [id]
+  (fn [event] (swap! selected-ids #(-> (if (.-shiftKey event) % #{})
+                                       (conj id)
+                                       (disj (% id))))))
+(defn render-container [{[x y] :pos [w h] :size}]
   [:rect {:x x :y y
           :width w :height h
           :style {:fill :red :stroke :blue}}])
-(def basic-skin 
-  "Basic skin er tegner objektet i en box eller ellipse
-   :as ob refererer til hele objektet som er parameter overført"
-  {:box (fn [{[x y] :pos, [w h] :size, c :color, :keys [selected id], :as ob}]
-          [:rect {:x x :y y
-                  :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
-                  :width w :height h
-                  :style {:fill (get @color-palette c :khaki)
-                          :stroke (if selected :black :blue)
-                          :stroke-width (if selected 4 2)}}])
-   :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as ob}]
-              [:ellipse {:cx (+ (/ w 2) x) :cy (+ (/ h 2) y)
-                         :on-click (fn [_] (swap! selected-ids #(if (% id) #{}  #{id})))
-                         :rx (/ w 2) :ry (/ h 2)
-                         :style {:fill (get @color-palette c :green)
-                                 :stroke (if selected :black :blue)
-                                 :stroke-width (if selected 4 2)}}])})
-(defn left-pad
+(defn add-svg-text [svg-obj {[x y] :pos [w h] :size :keys [text]}]
+  [:svg {:x x :y y}
+   svg-obj
+   [:text {:x 0  :y (+ 10 (/ h 2)) :font-size 20} text]])
+(def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
+                        (add-svg-text
+                         [:rect {:x 0 :y 0
+                                 :on-click (obj-click-handler id)
+                                 :width w :height h
+                                 :style {:fill (get @color-palette c :khaki)
+                                         :stroke (if selected :black :blue)
+                                         :stroke-width (if selected 4 2)}}]
+                         obj))
+                 :ellipse (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
+
+                            (add-svg-text
+                             [:ellipse {:cx (/ w 2) :cy (/ h 2)
+                                        :on-click (obj-click-handler id)
+                                        :rx (/ w 2) :ry (/ h 2)
+                                        :style {:fill (get @color-palette c :green)
+                                                :stroke (if selected :black :blue)
+                                                :stroke-width (if selected 4 2)}}]
+                             obj))})
+(defn left-pad "Left padder sting med nuller, "
   ([s len]
    (left-pad s len "0"))
   ([s len ch]
@@ -67,13 +80,6 @@
 (defonce palettes {:blue (mapv #(str "#0000" (left-pad (.toString % 16) 2)) (range 256))
                    :red (mapv #(str "#" (left-pad (.toString % 16) 2) "0000") (range 256))
                    :green (mapv #(str "#00" (left-pad (.toString % 16) 2) "00") (range 256))})
-
-(defn get-color [idx]
-  (let [dx (/ 256 (count @draw-objs))]
-    (cond
-      (= idx 0) (get (get-in palettes [@color]) idx :red)
-      :else (get (get-in palettes [@color]) (- (* dx (+ idx 1)) 1) :red))))
-
 (def render-fns {:default {:box (fn [{[x y] :pos [w h] :size}]
                                   [:rect {:x x :y y
                                           :width w :height h
@@ -99,7 +105,7 @@
 (defn align-left "Flytter objecter til venster" [xs]
   (let [xs (->> xs
                 volume-sort
-                (map #(dissoc % :i))
+                
                 (map-indexed (fn [i x] (assoc x :color i))))]
     (loop [dy 0
            resul []
@@ -123,9 +129,8 @@
     (tap> m) ; tap> kommado skriver til http://localhost:9631/inspect (tap) evt. kig i cheatsheet
     xs))
 
-(defn target-value [event] 
-  (.-value (.-target event))
-  )
+(defn target-value [event]
+  (.-value (.-target event)))
 
 (defn control-area []
   [:div
@@ -165,47 +170,91 @@
                    #_#_:on-change (fn [event] (reset! color (keyword (.-value (.-target event)))))}
           (doall (for [x (sort (keys palettes))]
                    ^{:key (name x)} [:option (name x)]))]]])
+(defn change-text-of-multiple [ids text]
+  (doseq [id ids] (swap-obj! id assoc :text text)))
+(defn obj-texts [[{:keys [text id]} :as xs]]
+  (let [multi (->>
+               xs
+               (map :text)
+               distinct
+               next)]
+    [:div
+     [:label "Text: "
+      ^{:key id} [:input {:type :text
+                          :default-value (str (when-not multi text))
+                          :placeholder (if multi "multi text" "Text")
+                          :on-change #(change-text-of-multiple @selected-ids (target-value %))}]]]))
 
-(defn obj-text [{:keys [text id]}]
-  [:div
-   [:label "Text: "
-    ^{:key id} [:input {:type :text
-                        :default-value (str text)
-                        :placeholder "Her kan der stå en tekst"
-                        :on-change #(swap-obj! id assoc :text (target-value %))}]]])
 
-(defn obj-type [{:keys [type id]}]
-  [:div [:label "Type: "
-        ^{:key id} [:select {:value type
-                             :on-change #(swap-obj! id assoc :type (keyword (target-value %)))}
-          (doall (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
-                   ^{:key (name k)} [:option {:value k} v]))]]])
+(defn change-type-of-multiple [ids type]
+  (doseq [id ids] (swap-obj! id assoc :type type)))
+
+(defn obj-types [[{:keys [type id]} :as xs]]
+  (let [multi (next (distinct (map :type xs)))]
+    [:div [:label "Type: "
+           ^{:key id} [:select {:value (if multi "" type)
+                                :on-change #(change-type-of-multiple @selected-ids (keyword (target-value %)))}
+                       (doall (concat (when multi (list [:option {:value ""} "Flere typer"]))
+                                      (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
+                                        ^{:key (name k)} [:option {:value k} v])))]]]))
+(defn goto-history "Går til det angivne tidspunkt i historikken. TIMETRAVEL!!!!" [ts]
+  (reset! current-ts nil)
+  (reset! draw-objs (get @history ts))
+  (reset! current-ts ts))
+#_(let [get-prev-next-ts (fn [order min-max]
+                           (when-let [xs (->> @history
+                                              keys
+                                              (filter #(order % @current-ts))
+                                              seq)]
+                             (apply min-max xs)))]
+    (def get-next-ts (partial get-prev-next-ts > min))
+    (def get-previous-ts (partial get-prev-next-ts < max)))
+(defn prev-next-fn
+  "Returnerer en funktion som kan rejse frem eller tilbage i historiken"
+  [direction]
+  (fn []
+    (when-let [xs (->> @history
+                       keys
+                       (filter #(direction % @current-ts))
+                       seq)]
+      (apply ({< max, > min} direction) xs))))
+(def get-next-ts (prev-next-fn >))
+(def get-previous-ts (prev-next-fn <))
 (defn drawing-history []
   [:div (count @history) " ændring(er)"
-   (doall (for  [x @history :let [ts (:ts (meta x))]] 
-               ^{:key ts}[:div {:style {:cursor :pointer :text-decoration :underline}
-                                :on-click #(->> @history 
-                                                (filter (comp #{ts} :ts meta))
-                                                first
-                                                (reset! draw-objs))}
-                          (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))
-   ]
-  )
+   [:button {:disabled (when-not (get-previous-ts) :disabled)
+             :on-click #(goto-history (get-previous-ts))}
+    "Undo"]
+   [:button {:disabled (when-not (get-next-ts) :disabled)
+             :on-click #(goto-history (get-next-ts))} "Redo"]
+   (doall (for  [[ts x] (reverse (sort @history))] ; sorter history efter tid (reverse = sidtse ændring øverst)
+            ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline
+                                      :color (cond (= ts @current-ts) :green
+                                                   (= ts @preview-ts) :purple)}
+                              :on-click #(goto-history ts)
+                              :on-mouse-over #(reset! preview-ts ts)
+                              :on-mouse-out #(reset! preview-ts nil)}
+                        (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))])
 
-(defn obj-properties [obj]
-  [:div "ID: " (:id obj) [:br]
-   [obj-type obj]
-   [obj-text obj]
-   [obj-color obj] [:hr]
-   [drawing-history]])
+(defn obj-properties [[obj :as xs]]
+  [:div "ID: " (:id obj) (when (next xs) " med flere") [:br]
+   [obj-types xs]
+
+   [obj-texts xs]
+   [obj-color obj] [:hr]])
 
 (defn mini-app []
-  [:div [control-area]
-   [:table [:tr
-            [:td [draw-area @draw-objs]]
-            [:td {:valign :top}
-             (let [[x] (filter (comp @selected-ids :id) @draw-objs)]
-               (when x [obj-properties x]))]]]])
+  (let [xs (or (get @history @preview-ts) @draw-objs)
+        by-id (util/index-by :id xs)]
+    [:div [control-area]
+     [:table
+      [:tr
+       [:td {:valign :top} [draw-area xs] (when @debug-mode
+                                            [:div [:hr] [:pre (with-out-str (cljs.pprint/pprint @history))]])]
+        ;consol output fanges og "formateres" råt 
+       [:td {:valign :top} [:div {:style {:max-height 500 :overflow :auto}} [drawing-history]]]
+       [:td {:valign :top}
+        (when (seq @selected-ids) [obj-properties (map by-id @selected-ids)])]]]]))
 
 (defn ^:export run []
   (rdom/render [mini-app] (js/document.getElementById "app")))
