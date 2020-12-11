@@ -3,12 +3,15 @@
    [akademi.util :as util]
    [reagent.core :as r]
    [reagent.dom :as rdom]))
-(def initial-objs [{:id 1 :type :container :pos [100,50], :size [40,40]}
-                   {:id 2 :type :container :pos [25,50], :size [75,75]}
-                   {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
-                   {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
-                   {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
-                   {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}])
+
+(def initial-objs "Vector der indeholder Start-up objs"
+  [{:id 1 :type :container :pos [100,50], :size [40,40]}
+   {:id 2 :type :container :pos [25,50], :size [75,75]}
+   {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
+   {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
+   {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
+   {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}])
+
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue]))
@@ -17,10 +20,9 @@
 (defonce history (r/atom {0 initial-objs})) ; map til vores historik
 (defonce current-ts (r/atom 0))
 (defonce preview-ts (r/atom nil))
+(defonce draw-objs (r/atom initial-objs))
 
-(defonce draw-objs ;
-  (r/atom initial-objs))
-(add-watch draw-objs :history (fn [_ _ old new]
+(add-watch draw-objs :history (fn [_ _ old new] ;"ser om vores objs ændres og opdaterer da historikken "
                                 (when-not
                                  (= old new)
                                   (let [ts (.now js/Date)]
