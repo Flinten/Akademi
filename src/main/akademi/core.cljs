@@ -4,19 +4,20 @@
    [reagent.core :as r]
    [reagent.dom :as rdom]))
 
-(def initial-objs "Vector der indeholder Start-up objs"
-  [{:id 1 :type :container :pos [100,50], :size [40,40]}
-   {:id 2 :type :container :pos [25,50], :size [75,75]}
-   {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
-   {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
-   {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
-   {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}])
+(def initial-objs "Map der indeholder Start-up objs"
+  {1 {:id 1 :type :container :pos [100,50], :size [40,40]}
+   2 {:id 2 :type :container :pos [25,50], :size [75,75]}
+ 103 {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
+ 104 {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
+ 105 {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
+ 201 {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}})
 
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
 (defonce color-palette (r/atom [:red :green :blue]))
 (defonce color (r/atom :blue))
-(defonce selected-ids (r/atom #{104}))
+(defonce selected-ids (r/atom #{}))
+(defonce clipboard (r/atom {}))
 (defonce history (r/atom {0 initial-objs})) ; map til vores historik 0 er timestamp
 (defonce current-ts (r/atom 0))
 (defonce preview-ts (r/atom nil))
@@ -33,12 +34,10 @@
 
 (defn swap-obj! [id f & args]
   ; NB! - udnytter at clojurescript er single threaded
-  (let [xs @draw-objs
-        xs' (map
-             #(if (= id (:id %)) (apply f % args) %)
-             xs)]
-    (when-not (= xs xs')
-      (reset! draw-objs xs'))))
+  (let [m @draw-objs
+        m' (apply update m id f args)] ;snak om den her sener
+    (when-not (= m m')
+      (reset! draw-objs m'))))
 (defn obj-click-handler
   [id]
   (fn [event] (swap! selected-ids #(-> (if (.-shiftKey event) % #{})
@@ -49,7 +48,7 @@
           :width w :height h
           :style {:fill :red :stroke :blue}}])
 (defn add-svg-text [svg-obj {[x y] :pos [w h] :size :keys [text]}]
-  [:svg {:x x :y y}
+  [:svg {:x x :y y :overflow :visible}
    svg-obj
    [:text {:x 0  :y (+ 10 (/ h 2)) :font-size 20} text]])
 (def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
@@ -95,19 +94,19 @@
 ;______________tegneflade_________________
  ;Tilføj nyt box objekt der bliver placeret på random pos
 (defn new-box [obj-list]
-  (conj obj-list
-        {:id (inc (apply max (map :id obj-list)))
+ (let [id (inc (apply max (keys obj-list)))] (assoc obj-list id
+        {:id id 
          :type :box
          :pos [(rand-int 500),(rand-int 500)]
          :size (let [w (+ 10 (rand-int 80))
                      h (+ 10 (rand-int 40))]
-                 [w h])}))
+                 [w h])})))
 
 (defn volume-sort [xs]
   (sort-by (fn [{s :size}] (apply * s)) xs))
 
-(defn align-left "Flytter objecter til venster" [xs]
-  (let [xs (->> xs
+(defn align-left' "Flytter objecter til venster" [xs]
+  (let [xs (->> xs 
                 volume-sort
                 
                 (map-indexed (fn [i x] (assoc x :color i))))]
@@ -122,26 +121,39 @@
                  rest-xs)
           (conj resul obj))))))
 
-(defn organiser-obj "Organiser box og container" [xs]
-  (let [m (group-by :parent xs)
-        m (into {}
-                (for [[id children] m :when id]
-                  [id {:n (count children)
-                       :size [(apply + (map (comp first :size) children))
-                              (apply max (map (comp second :size) children))]}]))] ; m indeholder forhvert contationer id et map med antal children og størrelse
-    (js/console.log (clj->js m))
-    (tap> m) ; tap> kommado skriver til http://localhost:9631/inspect (tap) evt. kig i cheatsheet
-    xs))
+(defn align-left [objs]
+  (util/index-by :id (align-left' (vals objs))))
+
+
 
 (defn target-value [event]
   (.-value (.-target event)))
 
+(defn delete-select-ids [xs]
+  (let [xs' @selected-ids]
+    (reset! selected-ids #{})
+    (apply dissoc xs xs')))
+
+(defn prepare-for-paste [objs] 
+  (let [n (inc (apply max (keys objs)))] 
+    (util/index-by :id
+                   (map-indexed (fn [i x ] (assoc x :id (+ n i) )) (vals objs)))))
 (defn control-area []
   [:div
    [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
    [:button {:on-click #(swap! draw-objs align-left)} "Flyt kasser"]
-   [:button {:on-click #(swap! draw-objs organiser-obj)} "Organiser"]
    [:button {:on-click #(swap! debug-mode not)} "debug on/off"]
+   [:button {:on-click #(swap! draw-objs delete-select-ids)
+             :disabled (when-not  (seq @selected-ids) :disabled)} "Slet"]
+   [:button {:on-click #(reset! clipboard (select-keys @draw-objs @selected-ids))
+             :disabled (when-not  (seq @selected-ids) :disabled)} "Copy"]
+   [:button {:on-click #(swap! draw-objs merge (prepare-for-paste @clipboard))
+             :disabled (when-not  (seq @clipboard ) :disabled)} "Paste"]
+   [:button {:on-click #(swap! draw-objs merge @clipboard)
+             :disabled (when-not  (seq @clipboard) :disabled)} "Merge"]
+
+
+
    [:label "Skin:"
     [:select {:selected (str @skin)
               :on-change (fn [event] (reset! skin (keyword (target-value event))))}
@@ -157,7 +169,7 @@
 
 (defn draw-area [xs] ;xs er en collection 
   (let [objs (doall
-              (for [x xs]
+              (for [x (vals xs)]
                 ^{:key (:id x)} [(or
                                   (when @debug-mode render-obj-debug)
                                   (get-in render-fns [@skin (:type x)])
