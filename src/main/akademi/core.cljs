@@ -91,24 +91,26 @@
                  :basic basic-skin
                  :presentation (merge basic-skin {:container (constantly nil)})})
 
+(defn get-next-available-id [objs]
+  (inc (apply max (keys objs))))
+
 ;______________tegneflade_________________
  ;Tilføj nyt box objekt der bliver placeret på random pos
 (defn new-box [obj-list]
- (let [id (inc (apply max (keys obj-list)))] (assoc obj-list id
-        {:id id 
-         :type :box
-         :pos [(rand-int 500),(rand-int 500)]
-         :size (let [w (+ 10 (rand-int 80))
-                     h (+ 10 (rand-int 40))]
-                 [w h])})))
+  (let [id (get-next-available-id obj-list)] (assoc obj-list id
+                                                    {:id id
+                                                     :type :box
+                                                     :pos [(rand-int 500),(rand-int 500)]
+                                                     :size (let [w (+ 10 (rand-int 80))
+                                                                 h (+ 10 (rand-int 40))]
+                                                             [w h])})))
 
 (defn volume-sort [xs]
   (sort-by (fn [{s :size}] (apply * s)) xs))
 
 (defn align-left' "Flytter objecter til venster" [xs]
-  (let [xs (->> xs 
+  (let [xs (->> xs
                 volume-sort
-                
                 (map-indexed (fn [i x] (assoc x :color i))))]
     (loop [dy 0
            resul []
@@ -129,13 +131,13 @@
 (defn target-value [event]
   (.-value (.-target event)))
 
-(defn delete-select-ids [xs]
-  (let [xs' @selected-ids]
+(defn delete-select-ids [m]
+  (let [m' @selected-ids]
     (reset! selected-ids #{})
-    (apply dissoc xs xs')))
+    (apply dissoc m m')))
 
 (defn prepare-for-paste [objs] 
-  (let [n (inc (apply max (keys objs)))] 
+  (let [n (get-next-available-id objs)] 
     (util/index-by :id
                    (map-indexed (fn [i x ] (assoc x :id (+ n i) )) (vals objs)))))
 (defn control-area []
