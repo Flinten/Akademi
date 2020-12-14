@@ -1,6 +1,7 @@
 (ns akademi.core
   (:require
    [akademi.util :as util]
+   [clojure.string :as string]
    [reagent.core :as r]
    [reagent.dom :as rdom]))
 
@@ -140,6 +141,9 @@
   (let [n (get-next-available-id objs)] 
     (util/index-by :id
                    (map-indexed (fn [i x ] (assoc x :id (+ n i) )) (vals objs)))))
+(defn copy-objects-to-clipboard[]
+  (reset! clipboard (select-keys @draw-objs @selected-ids))
+  (js/alert "Objects copied."))
 (defn control-area []
   [:div
    [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
@@ -147,7 +151,7 @@
    [:button {:on-click #(swap! debug-mode not)} "debug on/off"]
    [:button {:on-click #(swap! draw-objs delete-select-ids)
              :disabled (when-not  (seq @selected-ids) :disabled)} "Slet"]
-   [:button {:on-click #(reset! clipboard (select-keys @draw-objs @selected-ids))
+   [:button {:on-click #(copy-objects-to-clipboard)
              :disabled (when-not  (seq @selected-ids) :disabled)} "Copy"]
    [:button {:on-click #(swap! draw-objs merge (prepare-for-paste @clipboard))
              :disabled (when-not  (seq @clipboard ) :disabled)} "Paste"]
@@ -274,8 +278,19 @@
        [:td {:valign :top}
         (when (seq @selected-ids) [obj-properties (map by-id @selected-ids)])]]]]))
 
+(def keycode-handlers {:ctrl+C (fn [] (when (seq @selected-ids) (copy-objects-to-clipboard)))
+                       :ctrl+V (fn [] (js/alert "Her kommer kaldet til paste koden"))})
+
+(defn javascript-keyhandler [evt]
+  (let [keycode (.-keyCode evt)
+        key (string/upper-case (char keycode))
+        ctrl-key (when (.-ctrlKey evt) "ctrl+")
+        key (str ctrl-key key)]
+    ((get-in keycode-handlers [(keyword key)]))))
+
 (defn ^:export run []
-  (rdom/render [mini-app] (js/document.getElementById "app")))
+  (rdom/render [mini-app] (js/document.getElementById "app"))
+  (.addEventListener js/window "keyup" #(javascript-keyhandler %)))
 
 (defn ^:export reload []
   (.log js/console "reload...")
