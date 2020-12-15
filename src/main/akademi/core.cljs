@@ -23,6 +23,7 @@
 (defonce current-ts (r/atom 0))
 (defonce preview-ts (r/atom nil))
 (defonce draw-objs (r/atom initial-objs))
+(defonce checkbox-selected (r/atom true))
 
 (defonce draw-objs (r/atom initial-objs))
 (add-watch draw-objs :history (fn [_ _ old new] ;"ser om vores objs ændres og opdaterer da historikken "
@@ -48,14 +49,13 @@
   [:rect {:x x :y y
           :width w :height h
           :style {:fill :red :stroke :blue}}])
-(defn add-svg-text [svg-obj {[x y] :pos [w h] :size :keys [text]}]
-  [:svg {:x x :y y :overflow :visible}
+(defn add-svg-text [svg-obj {[x y] :pos [w h] :size :keys [text id]}]
+  [:svg {:x x :y y :overflow :visible :on-click (obj-click-handler id)}
    svg-obj
    [:text {:x 0  :y (+ 10 (/ h 2)) :font-size 20} text]])
 (def basic-skin {:box (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
                         (add-svg-text
                          [:rect {:x 0 :y 0
-                                 :on-click (obj-click-handler id)
                                  :width w :height h
                                  :style {:fill (get @color-palette c :khaki)
                                          :stroke (if selected :black :blue)
@@ -65,7 +65,6 @@
 
                             (add-svg-text
                              [:ellipse {:cx (/ w 2) :cy (/ h 2)
-                                        :on-click (obj-click-handler id)
                                         :rx (/ w 2) :ry (/ h 2)
                                         :style {:fill (get @color-palette c :green)
                                                 :stroke (if selected :black :blue)
@@ -137,13 +136,17 @@
     (reset! selected-ids #{})
     (apply dissoc m m')))
 
-(defn prepare-for-paste [objs] 
+(defn prepare-for-paste [objs clip] 
   (let [n (get-next-available-id objs)] 
     (util/index-by :id
-                   (map-indexed (fn [i x ] (assoc x :id (+ n i) )) (vals objs)))))
-(defn copy-objects-to-clipboard[]
-  (reset! clipboard (select-keys @draw-objs @selected-ids))
-  (js/alert "Objects copied."))
+                   (map-indexed (fn [i {:keys [pos] :as ob} ] (assoc ob :id (+ n i) :pos (mapv (partial + 10) pos) )) (vals clip)))))
+
+(defn paste-clipboard [objs clip]
+  (merge objs (prepare-for-paste objs clip)))
+(defn copy-objects-to-clipboard![]
+  (reset! clipboard (select-keys @draw-objs @selected-ids)))
+(defn paste-from-clipboard! []
+  (swap! draw-objs paste-clipboard @clipboard))
 (defn control-area []
   [:div
    [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
@@ -151,15 +154,12 @@
    [:button {:on-click #(swap! debug-mode not)} "debug on/off"]
    [:button {:on-click #(swap! draw-objs delete-select-ids)
              :disabled (when-not  (seq @selected-ids) :disabled)} "Slet"]
-   [:button {:on-click #(copy-objects-to-clipboard)
+   [:button {:on-click copy-objects-to-clipboard!
              :disabled (when-not  (seq @selected-ids) :disabled)} "Copy"]
-   [:button {:on-click #(swap! draw-objs merge (prepare-for-paste @clipboard))
+   [:button {:on-click paste-from-clipboard!
              :disabled (when-not  (seq @clipboard ) :disabled)} "Paste"]
    [:button {:on-click #(swap! draw-objs merge @clipboard)
              :disabled (when-not  (seq @clipboard) :disabled)} "Merge"]
-
-
-
    [:label "Skin:"
     [:select {:selected (str @skin)
               :on-change (fn [event] (reset! skin (keyword (target-value event))))}
@@ -242,6 +242,15 @@
       (apply ({< max, > min} direction) xs))))
 (def get-next-ts (prev-next-fn >))
 (def get-previous-ts (prev-next-fn <))
+(defn focus-history-on-ids 
+  "Tager en historik og fokusere på de valgte ider hvor der sker ændringer"
+  [history ids]
+  (let [interesting-times (->> (sort history)
+                   (partition-by (fn [[_ objs]] (select-keys objs ids)))
+                   (map first)
+                   (map first))] 
+    (select-keys history interesting-times)))
+  
 (defn drawing-history []
   [:div (count @history) " ændring(er)"
    [:button {:disabled (when-not (get-previous-ts) :disabled)
@@ -249,14 +258,19 @@
     "Undo"]
    [:button {:disabled (when-not (get-next-ts) :disabled)
              :on-click #(goto-history (get-next-ts))} "Redo"]
-   (doall (for  [[ts x] (reverse (sort @history))] ; sorter history efter tid (reverse = sidtse ændring øverst)
-            ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline
-                                      :color (cond (= ts @current-ts) :green
-                                                   (= ts @preview-ts) :purple)}
-                              :on-click #(goto-history ts)
-                              :on-mouse-over #(reset! preview-ts ts)
-                              :on-mouse-out #(reset! preview-ts nil)}
-                        (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)]))])
+   [:label [:input {:type :checkbox :checked @checkbox-selected :on-click #(swap! checkbox-selected not)}] "Histroy focus"]
+   (let [ids @selected-ids
+         hist (if (and @checkbox-selected (seq ids))
+                (focus-history-on-ids @history ids) 
+                @history)]
+     (doall (for  [[ts x] (reverse (sort hist))] ; sorter history efter tid (reverse = sidtse ændring øverst)
+              ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline
+                                        :color (cond (= ts @current-ts) :green
+                                                     (= ts @preview-ts) :purple)}
+                                :on-click #(goto-history ts)
+                                :on-mouse-over #(reset! preview-ts ts)
+                                :on-mouse-out #(reset! preview-ts nil)}
+                          (count x) " objekter: " (.substring (.toString (js/Date. ts)) 4 24)])))])
 
 (defn obj-properties [[obj :as xs]]
   [:div "ID: " (:id obj) (when (next xs) " med flere") [:br]
@@ -278,8 +292,8 @@
        [:td {:valign :top}
         (when (seq @selected-ids) [obj-properties (map by-id @selected-ids)])]]]]))
 
-(def keycode-handlers {:ctrl+C (fn [] (when (seq @selected-ids) (copy-objects-to-clipboard)))
-                       :ctrl+V (fn [] (js/alert "Her kommer kaldet til paste koden"))})
+(def keycode-handlers {:ctrl+C (fn [] (when (seq @selected-ids) (copy-objects-to-clipboard!)))
+                       :ctrl+V paste-from-clipboard!})
 
 (defn javascript-keyhandler [evt]
   (let [keycode (.-keyCode evt)
