@@ -6,12 +6,12 @@
    [reagent.dom :as rdom]))
 
 (def initial-objs "Map der indeholder Start-up objs"
-  {1 {:id 1 :type :container :pos [100,50], :size [40,40]}
-   2 {:id 2 :type :container :pos [25,50], :size [75,75]}
+  {#_#_1 {:id 1 :type :container :pos [100,50], :size [40,40]}
+   #_#_2 {:id 2 :type :container :pos [25,50], :size [75,75]}
  103 {:id 103 :type :box :pos [0,0], :size [50,50] :parent 1 :text "Sofie"}
  104 {:id 104 :type :box :pos [50,0], :size [50,50] :parent 2}
  105 {:id 105 :type :box :pos [100,100], :size [50,50] :parent 2}
- 201 {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2}})
+ 201 {:id 201 :type :ellipse :pos [200,200], :size [100,50] :parent 2 :text "Nini"}})
 
 (defonce skin (r/atom :basic))
 (defonce debug-mode (r/atom false))
@@ -147,29 +147,52 @@
   (reset! clipboard (select-keys @draw-objs @selected-ids)))
 (defn paste-from-clipboard! []
   (swap! draw-objs paste-clipboard @clipboard))
+(defn swap-selected-objs! [f]
+  (swap! draw-objs (fn [objs] (merge objs (f (select-keys objs @selected-ids))))))
+         
+(defn move-objects! [delta]
+  (swap-selected-objs! (fn [objs] (tap> objs)(util/map-vals (fn [v] (update v :pos #(mapv + % delta)))
+                                      objs))))
+(def arrows {[-1 0] "\u2190", [0 -1] "\u2191", [1 0] "\u2192" ,[0 1] "\u2193", [-1 -1] "\u2196" , [1 -1] "\u2197", [-1 1] "\u2199", [1 1] "\u2198" })
 (defn control-area []
-  [:div
-   [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
-   [:button {:on-click #(swap! draw-objs align-left)} "Flyt kasser"]
-   [:button {:on-click #(swap! debug-mode not)} "debug on/off"]
-   [:button {:on-click #(swap! draw-objs delete-select-ids)
-             :disabled (when-not  (seq @selected-ids) :disabled)} "Slet"]
-   [:button {:on-click copy-objects-to-clipboard!
-             :disabled (when-not  (seq @selected-ids) :disabled)} "Copy"]
-   [:button {:on-click paste-from-clipboard!
-             :disabled (when-not  (seq @clipboard ) :disabled)} "Paste"]
-   [:button {:on-click #(swap! draw-objs merge @clipboard)
-             :disabled (when-not  (seq @clipboard) :disabled)} "Merge"]
-   [:label "Skin:"
-    [:select {:selected (str @skin)
-              :on-change (fn [event] (reset! skin (keyword (target-value event))))}
-     (doall (for [x (sort (keys render-fns))]
-              ^{:key (name x)} [:option (name x)]))]]
-   [:label "Color:"
-    [:select {:selected (str @color)
-              :on-change (fn [event] (reset! color (keyword (target-value event))))}
-     (doall (for [x (sort (keys palettes))]
-              ^{:key (name x)} [:option (name x)]))]]])
+  (let [none-selected (empty? @selected-ids)]
+    [:div
+     [:div
+      [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
+      [:button {:on-click #(swap! draw-objs align-left)} "Flyt kasser"]
+      [:button {:on-click #(swap! debug-mode not)} "debug on/off"]
+      [:button {:on-click #(swap! draw-objs delete-select-ids)
+                :disabled (when none-selected :disabled)} "Slet"]
+      [:button {:on-click copy-objects-to-clipboard!
+                :disabled (when none-selected :disabled)} "Copy"]
+      [:button {:on-click paste-from-clipboard!
+                :disabled (when (empty? @clipboard) :disabled)} "Paste"]
+      [:button {:on-click #(swap! draw-objs merge @clipboard)
+                :disabled (when (empty? @clipboard) :disabled)} "Merge"]]
+     
+     [:div
+      [:label "Skin:"
+       [:select {:selected (str @skin)
+                 :on-change (fn [event] (reset! skin (keyword (target-value event))))}
+        (doall (for [x (sort (keys render-fns))]
+                 ^{:key (name x)} [:option (name x)]))]]
+      [:label "Color:"
+       [:select {:selected (str @color)
+                 :on-change (fn [event] (reset! color (keyword (target-value event))))}
+        (doall (for [x (sort (keys palettes))]
+                 ^{:key (name x)} [:option (name x)]))]]
+      [:table (doall (for [y [-1 0 1]]
+                       ^{:key y}
+                       [:tr (doall (for [x [-1 0 1]]
+                                     ^{:key x}
+                                     [:td (when-not (= 0 x y)
+                                            [:button {:on-click #(move-objects! (mapv (partial * 20) [x y]))
+                                                      :disabled none-selected
+                                                      :style {:height 30 :width 30}} (arrows [x y])])]))]))]
+      [:fieldset {:disabled none-selected}
+       [:legend "Tilpas størrelser"]
+       [:button {:on-click #()} "Som mindste"] [:button {} "Som største"]
+       ]]]))
 
 (defn render-obj-debug [obj] [:div (pr-str obj)])
 
@@ -250,23 +273,24 @@
                    (map first)
                    (map first))] 
     (select-keys history interesting-times)))
-  
+(def history-preview-style {:background-color :cyan})
+(def history-selected-style {:color :purple :background-color :yellow})
 (defn drawing-history []
-  [:div (count @history) " ændring(er)"
+  [:div "Historik "
    [:button {:disabled (when-not (get-previous-ts) :disabled)
              :on-click #(goto-history (get-previous-ts))}
     "Undo"]
    [:button {:disabled (when-not (get-next-ts) :disabled)
              :on-click #(goto-history (get-next-ts))} "Redo"]
-   [:label [:input {:type :checkbox :checked @checkbox-selected :on-click #(swap! checkbox-selected not)}] "Histroy focus"]
+   [:label [:input {:type :checkbox :checked @checkbox-selected :on-click #(swap! checkbox-selected not)}] "Fokus"]
    (let [ids @selected-ids
          hist (if (and @checkbox-selected (seq ids))
                 (focus-history-on-ids @history ids) 
                 @history)]
      (doall (for  [[ts x] (reverse (sort hist))] ; sorter history efter tid (reverse = sidtse ændring øverst)
-              ^{:key ts} [:div {:style {:cursor :pointer :text-decoration :underline
-                                        :color (cond (= ts @current-ts) :green
-                                                     (= ts @preview-ts) :purple)}
+              ^{:key ts} [:div {:style (merge {:cursor :pointer :text-decoration :underline}
+                                              (when (= ts @current-ts) history-selected-style)
+                                              (when (= ts @preview-ts) history-preview-style))
                                 :on-click #(goto-history ts)
                                 :on-mouse-over #(reset! preview-ts ts)
                                 :on-mouse-out #(reset! preview-ts nil)}
