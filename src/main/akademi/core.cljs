@@ -143,7 +143,7 @@
                    (map-indexed (fn [i x ] (assoc x :id (+ n i) )) (vals objs)))))
 (defn copy-objects-to-clipboard[]
   (reset! clipboard (select-keys @draw-objs @selected-ids))
-  (js/alert "Objects copied."))
+  (js/showToast "Objects copied."))
 (defn control-area []
   [:div
    [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]

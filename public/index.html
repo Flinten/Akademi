@@ -1,10 +1,25 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <link rel="stylesheet" href="styles.css"> 
     </head>
     <body>
         
         <div id="app"></div>
         <script src="scripts/core.js"></script>
+        <div id="toast">Some text some message..</div>
     </body>
+    <script>
+        function showToast(message) {
+            // Get the snackbar DIV
+            var x = document.getElementById("toast");
+
+            // Add the "show" class to DIV
+            x.className = "show";
+            x.innerHTML = message;
+
+            // After 3 seconds, remove the show class from DIV
+            setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+        }  
+    </script>
 </html>
