@@ -10,6 +10,7 @@
   x)
 
 (defn map-vals 
-  "Forklaring følger!"
+  "Anvender funktion på alle værdier i et map og retunerer det opdaterede map"
   [f m]
   (into {} (for [[k v] m] [k (f v)]))) #_ "udfører "
+

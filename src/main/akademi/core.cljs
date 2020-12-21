@@ -150,12 +150,28 @@
 (defn swap-selected-objs! [f]
   (swap! draw-objs (fn [objs] (merge objs (f (select-keys objs @selected-ids))))))
          
-(defn move-objects! [delta]
-  (swap-selected-objs! (fn [objs] (tap> objs)(util/map-vals (fn [v] (update v :pos #(mapv + % delta)))
-                                      objs))))
-(def arrows {[-1 0] "\u2190", [0 -1] "\u2191", [1 0] "\u2192" ,[0 1] "\u2193", [-1 -1] "\u2196" , [1 -1] "\u2197", [-1 1] "\u2199", [1 1] "\u2198" })
+(defn move-objects! [delta-x-y]
+  (swap-selected-objs!
+   (fn [objs] (util/map-vals
+               (fn moveobj-by-delta [v] (update v :pos #(mapv + % delta-x-y)))
+               objs))))
+(defn adjust-to-size [m min-max]
+  (let [xs (map :size (vals m))
+        f (fn [[w1 h1] [w2 h2]] [(min-max w1 w2) (min-max h1 h2)])
+        new-size (reduce f xs)
+        g (fn [obj] (assoc obj :size new-size))]
+    (util/map-vals g m)))
+
+(defn align-sizes-smallest [ev]
+  (swap-selected-objs! (fn [m] (adjust-to-size m min) )))
+
+(defn align-sizes-biggest [ev]
+(swap-selected-objs! (fn [m] (adjust-to-size m max))))
+
+  (def arrows {[-1 0] "\u2190", [0 -1] "\u2191", [1 0] "\u2192" ,[0 1] "\u2193", [-1 -1] "\u2196" , [1 -1] "\u2197", [-1 1] "\u2199", [1 1] "\u2198" })
 (defn control-area []
-  (let [none-selected (empty? @selected-ids)]
+  (let [none-selected (empty? @selected-ids)
+        multiple-selected (next @selected-ids)]
     [:div
      [:div
       [:button {:on-click (fn [_] (swap! draw-objs new-box))} "Ny kasse"]
@@ -169,7 +185,7 @@
                 :disabled (when (empty? @clipboard) :disabled)} "Paste"]
       [:button {:on-click #(swap! draw-objs merge @clipboard)
                 :disabled (when (empty? @clipboard) :disabled)} "Merge"]]
-     
+
      [:div
       [:label "Skin:"
        [:select {:selected (str @skin)
@@ -189,10 +205,10 @@
                                             [:button {:on-click #(move-objects! (mapv (partial * 20) [x y]))
                                                       :disabled none-selected
                                                       :style {:height 30 :width 30}} (arrows [x y])])]))]))]
-      [:fieldset {:disabled none-selected}
+      [:fieldset {:disabled (not multiple-selected)}
        [:legend "Tilpas størrelser"]
-       [:button {:on-click #()} "Som mindste"] [:button {} "Som største"]
-       ]]]))
+       [:button {:on-click align-sizes-smallest } "Mindste Højde/Bredde"] 
+       [:button {:on-click align-sizes-biggest} "Største Højde/Bredde"]]]]))
 
 (defn render-obj-debug [obj] [:div (pr-str obj)])
 
