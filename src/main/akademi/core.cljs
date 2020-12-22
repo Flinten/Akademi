@@ -156,11 +156,11 @@
                (fn moveobj-by-delta [v] (update v :pos #(mapv + % delta-x-y)))
                objs))))
 (defn adjust-to-size [m min-max]
-  (let [xs (map :size (vals m))
-        f (fn [[w1 h1] [w2 h2]] [(min-max w1 w2) (min-max h1 h2)])
-        new-size (reduce f xs)
-        g (fn [obj] (assoc obj :size new-size))]
-    (util/map-vals g m)))
+  (let [xs (map :size (vals m)) ; xs = from m select all :size properties
+        f (fn [[w1 h1] [w2 h2]] [(min-max w1 w2) (min-max h1 h2)]) ; funktion til at vælge den mindste højde/bredde
+        new-size (reduce f xs) ; new-size = sammenlign alle :size fra xs og find den mindste højde/bredde
+        g (fn [obj] (assoc obj :size new-size))] ; g = funktion til at sætte :size til new-size på det objekt som funktionen modtager
+    (util/map-vals g m))) ; map-vals kører funktionen g på alle objekter i mappet m
 
 (defn align-sizes-smallest [ev]
   (swap-selected-objs! (fn [m] (adjust-to-size m min) )))
