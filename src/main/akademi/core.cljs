@@ -162,13 +162,61 @@
         g (fn [obj] (assoc obj :size new-size))] ; g = funktion til at sætte :size til new-size på det objekt som funktionen modtager
     (util/map-vals g m))) ; map-vals kører funktionen g på alle objekter i mappet m
 
+(defn adjust-vals [m extract combine upd] ; [map, extraherer data fra mappet, combinerer dataen, updaterer og retunerer dataen]
+  (let [extracted-values (map extract (vals m)) 
+        combined-value (apply combine extracted-values)] 
+    (util/map-vals (fn [obj] (upd obj combined-value)) m))) 
+
+#_(adjust-vals {1 {:size [12 58]}, 2 {:size [56 73]}}, (comp first :size), min , #(assoc-in % [:size 0] %2)) ;eksempel på brug af adjust-vals
+
+
 (defn align-sizes-smallest [ev]
   (swap-selected-objs! (fn [m] (adjust-to-size m min) )))
 
 (defn align-sizes-biggest [ev]
 (swap-selected-objs! (fn [m] (adjust-to-size m max))))
 
+(defn avg [& args] 
+  (/ (apply + args) (count args)))
+
+(defn adjust-selected-objs! [extract, combine, update]
+  (swap-selected-objs! (fn [m] (adjust-vals m extract combine update))))
+
+(defn adjust-selected-objs-property! [path combine]
+(adjust-selected-objs! #(get-in % path), combine , #(assoc-in % path %2)))
+
+(defn size-buttons [multiple-selected]
+  [:fieldset {:disabled (not multiple-selected)}
+   [:legend "Tilpas størrelser"]
+   [:button {:on-click align-sizes-smallest} "Mindste Højde/Bredde"]
+   [:button {:on-click align-sizes-biggest} "Største Højde/Bredde"]
+   [:button {:on-click (fn [] (swap-selected-objs! (fn [m] (util/map-vals (fn [{[w h] :size :as obj}] (assoc obj :size [h w])) m))))} "Flip"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:size 1] min))} "Mindste højde"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:size 0] min))} "Mindste bredde"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:size 1] max))} "Største højde"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:size 0] max))} "Største bredde"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:size 1] avg))} "Gennemsnits højde"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:size 0] avg))} "Gennemsnits bredde"]])
+; comp vec reverse, "flipper" vores vector. eg: [45  86] -> [86 45]
+
+(defn align-buttons [multiple-selected]
+  [:fieldset {:disabled (not multiple-selected)}
+   [:legend "Tilpas placering"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 1] min))} "Top"] ; top og venstre virker 
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 1] max))} "Bund VIRKER IKKE"] 
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 0] min))} "Venstre"]
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 0] max))} "Højre VIRKER IKKE"]])
+
   (def arrows {[-1 0] "\u2190", [0 -1] "\u2191", [1 0] "\u2192" ,[0 1] "\u2193", [-1 -1] "\u2196" , [1 -1] "\u2197", [-1 1] "\u2199", [1 1] "\u2198" })
+(defn move-obj-buttons [none-selected]
+  [:table (doall (for [y [-1 0 1]]
+                   ^{:key y}
+                   [:tr (doall (for [x [-1 0 1]]
+                                 ^{:key x}
+                                 [:td (when-not (= 0 x y)
+                                        [:button {:on-click #(move-objects! (mapv (partial * 20) [x y]))
+                                                  :disabled none-selected
+                                                  :style {:height 30 :width 30}} (arrows [x y])])]))]))])
 (defn control-area []
   (let [none-selected (empty? @selected-ids)
         multiple-selected (next @selected-ids)]
@@ -197,18 +245,11 @@
                  :on-change (fn [event] (reset! color (keyword (target-value event))))}
         (doall (for [x (sort (keys palettes))]
                  ^{:key (name x)} [:option (name x)]))]]
-      [:table (doall (for [y [-1 0 1]]
-                       ^{:key y}
-                       [:tr (doall (for [x [-1 0 1]]
-                                     ^{:key x}
-                                     [:td (when-not (= 0 x y)
-                                            [:button {:on-click #(move-objects! (mapv (partial * 20) [x y]))
-                                                      :disabled none-selected
-                                                      :style {:height 30 :width 30}} (arrows [x y])])]))]))]
-      [:fieldset {:disabled (not multiple-selected)}
-       [:legend "Tilpas størrelser"]
-       [:button {:on-click align-sizes-smallest } "Mindste Højde/Bredde"] 
-       [:button {:on-click align-sizes-biggest} "Største Højde/Bredde"]]]]))
+      [:table [:tr
+               [:td [move-obj-buttons none-selected]]
+               [:td [size-buttons multiple-selected]]
+               [:td [align-buttons multiple-selected]]]]
+      ]]))
 
 (defn render-obj-debug [obj] [:div (pr-str obj)])
 
