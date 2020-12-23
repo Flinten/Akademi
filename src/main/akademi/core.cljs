@@ -71,7 +71,7 @@
                                                 :stroke-width (if selected 4 2)}}]
                              obj))
                  :juletrae (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
-                            (let [data [[:white [[0,0] [0,50] [50,50] [50,0]]]
+                            (let [data [;[:white [[0,0] [0,50] [50,50] [50,0]]]
                                         [:green [[25,20] [50,40] [0,40]]]
                                         [:lightgreen [[25,5] [40,25] [10,25]]]
                                         [:green [[25,0] [30,10] [20,10]]]
@@ -87,7 +87,8 @@
                                                                         pts) ]]
                                                ^{:key (hash data )}
                                                [:polygon {:points (apply str (for [[x y] pts] (str x "," y " ")))
-                                                          :style {:fill color }}
+                                                          :style (merge {:fill color  } 
+                                                                        (when selected {:fill :magenta :stroke :black :stroke-width 4}))}
 
 
 ;[:rect {​​​​:x 100 :y 100 :height 10 :width 10 :style {​​​​:fill :green} ​​​​} ​​​​]}
@@ -233,7 +234,18 @@
    [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 1] min))} "Top"] ; top og venstre virker 
    [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 1] max))} "Bund VIRKER IKKE"] 
    [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 0] min))} "Venstre"]
-   [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 0] max))} "Højre VIRKER IKKE"]])
+   [:button {:on-click (fn [] (adjust-selected-objs-property! [:pos 0] max))} "Højre VIRKER IKKE"]
+   [:button {:on-click (fn [] (swap-selected-objs! 
+                               (fn [m] 
+                                 (let [xs (sort-by (comp first :pos second) m)
+                                       positioner (map (comp first :pos second) m)
+                                       x0 (apply min positioner)
+                                       dist (/ (- (apply max positioner) x0) (dec(count positioner)))
+                                       xs (map-indexed (fn [i [k {[x y] :pos :as obj}]] 
+                                                         [k (assoc-in obj [:pos 0] (+ x0 (* i dist)))])
+                                                       xs)]xs)
+                                 )))} 
+    "Vandret fordeling"]])
 
   (def arrows {[-1 0] "\u2190", [0 -1] "\u2191", [1 0] "\u2192" ,[0 1] "\u2193", [-1 -1] "\u2196" , [1 -1] "\u2197", [-1 1] "\u2199", [1 1] "\u2198" })
 (defn move-obj-buttons [none-selected]
