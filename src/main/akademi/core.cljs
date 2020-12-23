@@ -69,7 +69,35 @@
                                         :style {:fill (get @color-palette c :green)
                                                 :stroke (if selected :black :blue)
                                                 :stroke-width (if selected 4 2)}}]
-                             obj))})
+                             obj))
+                 :juletrae (fn [{[x y] :pos [w h] :size c :color :keys [selected id] :as obj}]
+                            (let [data [[:white [[0,0] [0,50] [50,50] [50,0]]]
+                                        [:green [[25,20] [50,40] [0,40]]]
+                                        [:lightgreen [[25,5] [40,25] [10,25]]]
+                                        [:green [[25,0] [30,10] [20,10]]]
+                                        [:brown [[20,40] [30,40] [30,50] [20,50]]]
+                                        ]
+                                
+                                  ]
+                              (add-svg-text (concat [[:rect {:x 0 :y 0 :height 0 :width 0 :style {:fill :white}}]]
+                                                    (for [[color pts] data 
+                                                          :let[pts (map (fn [[a b]]
+                                                                          [(int (* a w (/ 1 50)))
+                                                                           (int (* b h (/ 1 50)))])
+                                                                        pts) ]]
+                                               ^{:key (hash data )}
+                                               [:polygon {:points (apply str (for [[x y] pts] (str x "," y " ")))
+                                                          :style {:fill color }}
+
+
+;[:rect {​​​​:x 100 :y 100 :height 10 :width 10 :style {​​​​:fill :green} ​​​​} ​​​​]}
+;[:polygon {​​​​:points "105,80 130,100 80,100" :style {​​​​:fill :green} ​​​​} ​​​​]
+;[:polygon {​​​​:points "105,65 120,85 90,85" :style {​​​​:fill :green} ​​​​} ​​​​]
+;[:polygon {​​​​:points "105,60 110,70 100,70" :style {​​​​:fill :green} ​​​​} ​​​​]
+                                                
+                                                
+                                                ]))
+                                               obj)))})
 (defn left-pad "Left padder string med nuller, "
   ([s len]
    (left-pad s len "0"))
@@ -297,7 +325,7 @@
            ^{:key id} [:select {:value (if multi "" type)
                                 :on-change #(change-type-of-multiple @selected-ids (keyword (target-value %)))}
                        (doall (concat (when multi (list [:option {:value ""} "Flere typer"]))
-                                      (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"]]]
+                                      (for [[k v] [[:box "Kasse"] [:ellipse "Ellipse"] [:juletrae "Juletræ"]]]
                                         ^{:key (name k)} [:option {:value k} v])))]]]))
 (defn goto-history "Går til det angivne tidspunkt i historikken. TIMETRAVEL!!!!" [ts]
   (reset! current-ts nil)
